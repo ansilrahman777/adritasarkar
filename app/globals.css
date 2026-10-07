@@ -1,0 +1,741 @@
+@import 'tailwindcss';
+
+/* Hover zones are active only on real pointer devices at md+ (mirrors DESKTOP_QUERY). */
+@custom-variant hover-desktop (@media (min-width: 48rem) and (hover: hover) and (pointer: fine));
+
+/* Split hero (copy left, Adrita right) only on landscape screens ≥ 640px. Phones and
+   portrait tablets get the stacked layout so she is never cropped off the edge. */
+@custom-variant split (@media (min-width: 40rem) and (orientation: landscape));
+
+/* Input capability: copy that says "hover" vs "swipe". */
+@custom-variant can-hover (@media (hover: hover));
+@custom-variant no-hover (@media (hover: none));
+
+/* Very short viewports (landscape phones). */
+@custom-variant short (@media (max-height: 30rem));
+
+@theme inline {
+  --font-sans: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-script: var(--font-caveat), 'Segoe Script', cursive;
+  --font-mono: var(--font-jetbrains), ui-monospace, 'SFMono-Regular', monospace;
+}
+
+@theme {
+  --color-wine-950: #22050c;
+  --color-wine-900: #3d0913;
+  --color-wine-800: #5a0e1d;
+  --color-wine-600: #8e1a2c;
+  --color-coral-400: #ff8c74;
+  --color-blush-100: #f8dcd6;
+
+  /* Light sections + accent (from the reference's red/white/black rhythm). */
+  --color-paper: #f7f2ef;
+  --color-paper-2: #eee5e1;
+  --color-ink: #1d0f12;
+  --color-ink-soft: #5e4c50;
+  --color-crimson-500: #d4213d;
+  --color-crimson-600: #b3172f;
+
+  --animate-cue: cue-nudge 2.4s ease-in-out infinite;
+
+  @keyframes cue-nudge {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(4px);
+    }
+  }
+}
+
+/* Nav colours follow the section underneath (set on the header as data-theme). */
+@utility nav-ink {
+  color: var(--nav-ink);
+}
+@utility nav-ink-soft {
+  color: var(--nav-ink-soft);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    overflow-x: clip;
+  }
+
+  ::selection {
+    background: var(--color-coral-400);
+    color: var(--color-wine-950);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-crimson-500);
+    outline-offset: 3px;
+  }
+
+  [data-nav-theme='dark'] :focus-visible {
+    outline-color: var(--color-blush-100);
+  }
+
+  section[id] {
+    scroll-margin-top: 4rem;
+  }
+}
+
+@layer components {
+  /* ================= Site navigation ================= */
+
+  .site-nav {
+    --nav-ink: #fff;
+    --nav-ink-soft: rgb(255 255 255 / 0.72);
+    transition:
+      background-color 400ms ease,
+      box-shadow 400ms ease,
+      backdrop-filter 400ms ease;
+  }
+
+  .site-nav[data-theme='light'] {
+    --nav-ink: var(--color-ink);
+    --nav-ink-soft: rgb(29 15 18 / 0.62);
+  }
+
+  .site-nav[data-scrolled='true'] {
+    background-color: rgb(34 5 12 / 0.55);
+    backdrop-filter: blur(14px) saturate(1.3);
+    box-shadow: 0 1px 0 rgb(255 255 255 / 0.06);
+  }
+
+  .site-nav[data-theme='light'][data-scrolled='true'] {
+    background-color: rgb(247 242 239 / 0.8);
+    box-shadow: 0 1px 0 rgb(29 15 18 / 0.06);
+  }
+
+  .nav-pill {
+    background: var(--color-crimson-500);
+    box-shadow:
+      0 8px 24px -6px rgb(212 33 61 / 0.8),
+      inset 0 1px 0 rgb(255 255 255 / 0.2);
+  }
+
+  /* ================= Hero backdrop + video ================= */
+
+  .hero-backdrop {
+    background:
+      radial-gradient(90% 70% at 70% 60%, rgb(255 140 116 / 0.26), transparent 65%),
+      linear-gradient(160deg, #22050c 0%, #5a0e1d 40%, #8e1a2c 72%, #c9473f 100%);
+  }
+
+  /* Which part of the frame stays visible when `cover` crops. Tune to your clips. */
+  .hero-video {
+    object-fit: cover;
+    object-position: var(--hero-focus-x, 62%) 50%;
+  }
+
+  /* Stacked: soft top/bottom edges so the frame melts into the backdrop. */
+  .hero-frame {
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 12%, #000 86%, transparent 100%);
+  }
+
+  .hero-scrim {
+    background: none;
+  }
+
+  @media (min-width: 40rem) and (orientation: landscape) {
+    :root {
+      --hero-focus-x: 60%;
+    }
+
+    .hero-backdrop {
+      background:
+        radial-gradient(90% 70% at 78% 42%, rgb(255 140 116 / 0.28), transparent 65%),
+        linear-gradient(135deg, #22050c 0%, #5a0e1d 42%, #8e1a2c 72%, #c9473f 100%);
+    }
+
+    .hero-frame {
+      mask-image: none;
+    }
+
+    /* Left scrim keeps the copy readable over the clip's negative space. */
+    .hero-scrim {
+      background:
+        linear-gradient(to right, rgb(34 5 12 / 0.72) 0%, rgb(34 5 12 / 0.35) 32%, transparent 58%),
+        linear-gradient(to top, rgb(34 5 12 / 0.5), transparent 26%);
+    }
+  }
+
+  @media (min-width: 64rem) and (orientation: landscape) {
+    :root {
+      --hero-focus-x: 50%;
+    }
+  }
+
+  /* Ambient light; position/opacity are eased in JS (useHeroInteraction). */
+  .hero-glow {
+    position: absolute;
+    top: -10%;
+    left: 0;
+    width: 60%;
+    height: 120%;
+    background: radial-gradient(
+      closest-side,
+      rgb(255 205 186 / 0.95),
+      rgb(255 140 116 / 0.35) 55%,
+      transparent
+    );
+    transform: translate3d(53%, 0, 0);
+    opacity: 0.75;
+    will-change: transform, opacity;
+  }
+
+  /* ================= Hero interaction hint ================= */
+
+  .zone-hint {
+    position: relative;
+    width: 3.25rem;
+    height: 1.375rem;
+    flex-shrink: 0;
+    align-items: flex-end;
+  }
+
+  .zone-track {
+    display: flex;
+    gap: 3px;
+    width: 100%;
+  }
+
+  .zone-seg {
+    flex: 1;
+    height: 3px;
+    border-radius: 999px;
+    background: rgb(248 220 214 / 0.25);
+    transition:
+      background-color 300ms ease,
+      box-shadow 300ms ease;
+  }
+
+  .zone-pointer {
+    position: absolute;
+    top: -1px;
+    left: 0;
+    width: 14px;
+    height: 14px;
+    color: #fff;
+    filter: drop-shadow(0 1px 3px rgb(34 5 12 / 0.5));
+    transform: translateX(24px);
+    transition: transform 450ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Idle demo: the pointer visits left → center → right. */
+  @media (prefers-reduced-motion: no-preference) {
+    .zone-pointer {
+      animation: zone-demo 5.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    }
+    .zone-seg[data-seg='left'] {
+      animation: seg-left 5.2s ease infinite;
+    }
+    .zone-seg[data-seg='center'] {
+      animation: seg-center 5.2s ease infinite;
+    }
+    .zone-seg[data-seg='right'] {
+      animation: seg-right 5.2s ease infinite;
+    }
+  }
+
+  /* Live mode: the cursor is over the hero → mirror the real zone. */
+  [data-zone] .zone-pointer,
+  [data-zone] .zone-seg {
+    animation: none;
+  }
+
+  [data-zone='left'] .zone-pointer {
+    transform: translateX(6px);
+  }
+  [data-zone='center'] .zone-pointer {
+    transform: translateX(24px);
+  }
+  [data-zone='right'] .zone-pointer {
+    transform: translateX(42px);
+  }
+
+  [data-zone='left'] .zone-seg[data-seg='left'],
+  [data-zone='center'] .zone-seg[data-seg='center'],
+  [data-zone='right'] .zone-seg[data-seg='right'] {
+    background-color: var(--color-coral-400);
+    box-shadow: 0 0 8px rgb(255 140 116 / 0.7);
+  }
+
+  /* Reduced motion, cursor outside: rest on the center segment. */
+  @media (prefers-reduced-motion: reduce) {
+    .zone-seg[data-seg='center'] {
+      background-color: var(--color-coral-400);
+    }
+    [data-zone]:not([data-zone='center']) .zone-seg[data-seg='center'] {
+      background-color: rgb(248 220 214 / 0.25);
+      box-shadow: none;
+    }
+  }
+
+  .tap-hint {
+    position: relative;
+    display: grid;
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+    place-items: center;
+  }
+
+  .tap-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--color-coral-400);
+    box-shadow: 0 0 8px rgb(255 140 116 / 0.8);
+  }
+
+  .tap-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    border: 1.5px solid rgb(255 140 116 / 0.9);
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tap-ring {
+      animation: tap-ripple 2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    }
+  }
+
+  /* During the intro and the point-down, the hint steps back so Adrita has the stage. */
+  .zone-hint,
+  .tap-hint {
+    transition: opacity 400ms ease;
+  }
+  [data-locked] .zone-hint,
+  [data-locked] .tap-hint {
+    opacity: 0.45;
+  }
+
+  /* Scroll cue brightens while Adrita points at it. */
+  .scroll-cue {
+    opacity: 0.7;
+    transition: opacity 400ms ease;
+  }
+
+  .scroll-cue-icon {
+    transition:
+      box-shadow 400ms ease,
+      background-color 400ms ease;
+  }
+
+  [data-clip='center-point'] .scroll-cue {
+    opacity: 1;
+  }
+
+  [data-clip='center-point'] .scroll-cue-icon {
+    background-color: rgb(255 255 255 / 0.18);
+    box-shadow: 0 0 0 6px rgb(255 140 116 / 0.25);
+  }
+
+  /* ================= About — lanyard badge ================= */
+
+  .about-backdrop {
+    background:
+      radial-gradient(60% 50% at 82% 30%, rgb(255 140 116 / 0.18), transparent 70%),
+      linear-gradient(180deg, #2a0610 0%, #5a0e1d 38%, #8e1a2c 100%);
+  }
+
+  .badge-card {
+    background: linear-gradient(165deg, #2c0b16 0%, #13040b 100%);
+    box-shadow:
+      0 0 0 6px #1a0710,
+      0 0 0 7px rgb(255 255 255 / 0.08),
+      0 50px 80px -30px rgb(0 0 0 / 0.65);
+  }
+
+  /* Crop of the badge picture; tune to frame Adrita's face. */
+  .badge-photo {
+    object-fit: cover;
+    object-position: var(--badge-focus, 68% 24%);
+    transform: scale(1.35);
+    transform-origin: var(--badge-focus, 68% 24%);
+  }
+
+  .badge-gloss {
+    background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.16) 48%, transparent 58%);
+  }
+
+  .badge-barcode {
+    background: repeating-linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0.75) 0 2px,
+      transparent 2px 4px,
+      rgb(255 255 255 / 0.75) 4px 5px,
+      transparent 5px 9px
+    );
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .badge-sway {
+      animation: badge-sway 6.5s ease-in-out infinite;
+    }
+    .float-chip {
+      animation: float-y 5s ease-in-out infinite;
+      animation-delay: var(--float-delay, 0s);
+    }
+  }
+
+  /* ================= Expertise — hanging tags ================= */
+
+  .tag-board {
+    display: flex;
+    flex-direction: column;
+    gap: 2.25rem;
+    padding-bottom: 1rem;
+  }
+
+  .tag-card[data-index='1'],
+  .tag-card[data-index='3'] {
+    margin-left: 18%;
+  }
+
+  @media (min-width: 40rem) {
+    .tag-card[data-index='1'],
+    .tag-card[data-index='3'] {
+      margin-left: 32%;
+    }
+  }
+
+  /* Desktop: zig-zag across the column, overlapping vertically like pinned notes. */
+  @media (min-width: 64rem) {
+    .tag-board {
+      gap: 0;
+      padding-top: 1rem;
+    }
+    .tag-card {
+      margin-top: -7rem;
+    }
+    .tag-card[data-index='0'] {
+      margin-top: 0;
+      margin-left: 52%;
+    }
+    .tag-card[data-index='1'] {
+      margin-left: 2%;
+    }
+    .tag-card[data-index='2'] {
+      margin-left: 50%;
+    }
+    .tag-card[data-index='3'] {
+      margin-left: 7%;
+    }
+  }
+
+  .tag-card-body {
+    background: #fff;
+    box-shadow:
+      0 1px 0 rgb(29 15 18 / 0.04),
+      0 30px 60px -32px rgb(29 15 18 / 0.4);
+  }
+
+  .tag-card-fill {
+    background: linear-gradient(160deg, #e43a54 0%, #c8102e 60%, #a50f28 100%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.2);
+  }
+
+  /* Punched hole the tag hangs from. */
+  .tag-pin {
+    background: var(--color-paper);
+    box-shadow:
+      inset 0 1px 3px rgb(0 0 0 / 0.45),
+      0 0 0 3px rgb(255 255 255 / 0.35);
+  }
+
+  /* ================= Skills ================= */
+
+  .skill-chip {
+    transition:
+      border-color 250ms ease,
+      color 250ms ease,
+      translate 250ms ease,
+      background-color 250ms ease;
+  }
+
+  .skill-chip:hover {
+    border-color: rgb(212 33 61 / 0.45);
+    color: var(--color-crimson-600);
+    background-color: #fff;
+    translate: 0 -2px;
+  }
+
+  /* ================= Experience — horizontal journey ================= */
+
+  .journey-track {
+    padding-inline: 1.5rem;
+  }
+
+  @media (min-width: 48rem) {
+    .journey-track {
+      gap: 1.5rem;
+      /* Start aligned with the centred heading; end with breathing room. */
+      padding-left: max(2.5rem, calc((100vw - 80rem) / 2 + 2.5rem));
+      padding-right: 2.5rem;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .journey-track {
+      padding-left: max(3.5rem, calc((100vw - 80rem) / 2 + 3.5rem));
+      padding-right: 3.5rem;
+    }
+  }
+
+  .journey-backdrop {
+    color: transparent;
+    -webkit-text-stroke: 1.5px rgb(29 15 18 / 0.08);
+  }
+
+  /* ================= Projects ================= */
+
+  .project-card {
+    box-shadow: 0 30px 60px -36px rgb(29 15 18 / 0.35);
+    transition:
+      translate 350ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 350ms ease,
+      border-color 350ms ease;
+  }
+
+  .project-card:hover {
+    translate: 0 -6px;
+    border-color: rgb(212 33 61 / 0.25);
+    box-shadow: 0 40px 70px -36px rgb(212 33 61 / 0.45);
+  }
+
+  /* ================= Credentials — hanging track ================= */
+
+  .cred-viewport {
+    padding-top: 0.375rem;
+    padding-bottom: 2.5rem;
+    overflow: hidden;
+    mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  }
+
+  .cred-card {
+    box-shadow: 0 24px 50px -30px rgb(29 15 18 / 0.35);
+    transform-origin: 50% -2.5rem; /* swings from the top of its string */
+    transition:
+      rotate 450ms cubic-bezier(0.22, 1, 0.36, 1),
+      translate 450ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 450ms ease;
+  }
+
+  .cred-item:hover .cred-card {
+    rotate: -2.5deg;
+    translate: 0 -4px;
+    box-shadow: 0 34px 60px -30px rgb(212 33 61 / 0.45);
+  }
+
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .cred-track {
+      animation: cred-glide 42s linear infinite;
+    }
+    .cred-viewport:hover .cred-track,
+    .cred-viewport:focus-within .cred-track {
+      animation-play-state: paused;
+    }
+  }
+
+  /* Touch or reduced motion: no loop — a native, swipeable row instead. */
+  @media (hover: none), (prefers-reduced-motion: reduce) {
+    .cred-viewport {
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: none;
+      mask-image: none;
+    }
+    .cred-viewport::-webkit-scrollbar {
+      display: none;
+    }
+    .cred-track {
+      padding-inline: 1.5rem;
+      scroll-padding-inline: 1.5rem;
+    }
+    .cred-item:not([data-copy='0']) {
+      display: none;
+    }
+    .cred-drift {
+      transform: none !important;
+    }
+  }
+
+  .course-row p:first-child {
+    transition: color 250ms ease;
+  }
+  .course-row:hover p:first-child {
+    color: var(--color-crimson-600);
+  }
+
+  /* ================= Contact ================= */
+
+  .contact-backdrop {
+    background:
+      radial-gradient(70% 45% at 50% 0%, rgb(212 33 61 / 0.2), transparent 70%),
+      linear-gradient(180deg, #120306 0%, #0b0205 70%);
+  }
+
+  .giant-word {
+    font-size: clamp(4.5rem, 19vw, 24rem);
+    font-stretch: 75%;
+  }
+
+  /* Subtle extrusion so the letters read as solid objects. */
+  .giant-letter {
+    text-shadow:
+      0 1px 0 #d8cdcf,
+      0 2px 0 #c9bcbf,
+      0 3px 0 #b9abae,
+      0 4px 0 #a99b9e,
+      0 24px 40px rgb(0 0 0 / 0.55);
+  }
+
+  .contact-card {
+    background: linear-gradient(150deg, #e0344f 0%, #c8102e 55%, #9d0f26 100%);
+    box-shadow:
+      0 60px 120px -40px rgb(0 0 0 / 0.75),
+      inset 0 1px 0 rgb(255 255 255 / 0.18);
+  }
+
+  /* ================= Footer wordmark ================= */
+
+  .wordmark {
+    font-size: clamp(6rem, 30vw, 30rem);
+  }
+
+  .wordmark-echo {
+    color: transparent;
+    -webkit-text-stroke: 1px rgb(255 255 255 / 0.55);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    .scroll-cue,
+    .scroll-cue-icon,
+    .zone-pointer,
+    .zone-seg,
+    .skill-chip,
+    .project-card,
+    .cred-card {
+      transition: none;
+    }
+  }
+}
+
+/* ================= Keyframes ================= */
+
+@keyframes zone-demo {
+  0%,
+  18% {
+    transform: translateX(6px);
+  }
+  30%,
+  48% {
+    transform: translateX(24px);
+  }
+  60%,
+  78% {
+    transform: translateX(42px);
+  }
+  90%,
+  100% {
+    transform: translateX(6px);
+  }
+}
+
+@keyframes seg-left {
+  0%,
+  20%,
+  92%,
+  100% {
+    background-color: var(--color-coral-400);
+    box-shadow: 0 0 8px rgb(255 140 116 / 0.7);
+  }
+  26%,
+  86% {
+    background-color: rgb(248 220 214 / 0.25);
+    box-shadow: none;
+  }
+}
+
+@keyframes seg-center {
+  0%,
+  26%,
+  56%,
+  100% {
+    background-color: rgb(248 220 214 / 0.25);
+    box-shadow: none;
+  }
+  32%,
+  50% {
+    background-color: var(--color-coral-400);
+    box-shadow: 0 0 8px rgb(255 140 116 / 0.7);
+  }
+}
+
+@keyframes seg-right {
+  0%,
+  56%,
+  86%,
+  100% {
+    background-color: rgb(248 220 214 / 0.25);
+    box-shadow: none;
+  }
+  62%,
+  80% {
+    background-color: var(--color-coral-400);
+    box-shadow: 0 0 8px rgb(255 140 116 / 0.7);
+  }
+}
+
+@keyframes tap-ripple {
+  0% {
+    transform: scale(0.35);
+    opacity: 1;
+  }
+  70%,
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes badge-sway {
+  0%,
+  100% {
+    rotate: -1.4deg;
+  }
+  50% {
+    rotate: 1.4deg;
+  }
+}
+
+@keyframes float-y {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -6px;
+  }
+}
+
+@keyframes cred-glide {
+  to {
+    transform: translateX(-25%);
+  }
+}
