@@ -7,6 +7,7 @@ import ExpertiseSection from '@/components/sections/ExpertiseSection'
 import ProjectsSection from '@/components/sections/ProjectsSection'
 import SkillsSection from '@/components/sections/SkillsSection'
 import MotionRoot from '@/components/site/MotionRoot'
+import SiteCursor from '@/components/site/SiteCursor'
 import SiteFooter from '@/components/site/SiteFooter'
 import SiteNavigation from '@/components/site/SiteNavigation'
 import { CREDENTIALS, JOURNEY, PROFILE, SKILLS } from '@/content/profile'
@@ -53,6 +54,7 @@ export default function HomePage() {
         <ContactSection />
       </main>
       <SiteFooter />
+      <SiteCursor />
     </MotionRoot>
   )
 }

@@ -13,8 +13,8 @@ import HeroVideo from './HeroVideo'
  *   z-[5] glow             — soft light that drifts toward the selected zone
  *   z-10  HeroInteraction  — transparent tap surface (touch)
  *   z-20  HeroContent      — copy (pointer-events: none except links)
- *   z-30  controls
- * The site navigation is fixed above everything (components/site/SiteNavigation).
+ *   z-30  sound toggle, keyboard greeting
+ * The site navigation and custom cursor are fixed above everything (components/site).
  *
  * Stacked (phones, portrait tablets): copy on top, character frame below.
  * Split (landscape ≥ 640px): the video fills the hero; copy sits in its left negative space.
@@ -22,13 +22,13 @@ import HeroVideo from './HeroVideo'
  * Zone detection is one pointer handler on the <section>, so nothing blocks links.
  * Live state is exposed to CSS as data-clip / data-zone / data-locked
  * (data-locked starts set: the intro plays fully before the cursor does anything).
- * This component never re-renders after mount.
+ * The site cursor mirrors data-zone / data-locked. This component never re-renders after mount.
  */
 export default function InteractiveHero() {
   const heroRef = useRef(null)
   const videoRef = useRef(null)
   const glowRef = useRef(null)
-  const { pointerHandlers, videoHandlers, onTap, greet, setPaused } = useHeroInteraction({
+  const { pointerHandlers, videoHandlers, onTap, greet, sound } = useHeroInteraction({
     heroRef,
     videoRef,
     glowRef,
@@ -54,7 +54,7 @@ export default function InteractiveHero() {
         <div ref={glowRef} className="hero-glow" />
       </div>
 
-      <HeroInteraction onTap={onTap} onGreet={greet} onPauseChange={setPaused} />
+      <HeroInteraction onTap={onTap} onGreet={greet} sound={sound} />
       <HeroContent />
     </section>
   )

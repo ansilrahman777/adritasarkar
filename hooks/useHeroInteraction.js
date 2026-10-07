@@ -26,12 +26,14 @@ import {
  *   cursor center   → rest, immediately            (cuts a side look short)
  *   30s after intro → center-point, played fully, LOCKED → rest
  *   tap / keyboard  → replays the intro, LOCKED → rest
+ *   sound           → on by default; 'pending' until the browser allows it (first
+ *                     click/tap/key); the button toggles mute (HeroVideo.setSound)
  *
  * "rest" = a due center-point if the timer has fired, otherwise working. When a lock
  * ends with the cursor already on a side, she looks that way instead of resting.
  *
  * All state lives in one plain object created once per mount; nothing here causes a
- * React render. Pointer work is batched to one rAF; the glow eases in its own rAF loop
+ * React render — except the sound button, which subscribes to `sound` on its own. Pointer work is batched to one rAF; the glow eases in its own rAF loop
  * that stops once settled; the 30s countdown pauses while it couldn't be seen.
  */
 function createHeroController({ heroRef, videoRef, glowRef }) {
@@ -40,7 +42,6 @@ function createHeroController({ heroRef, videoRef, glowRef }) {
     zone: null, // zone under the cursor (desktop), null when outside the hero
     locked: true, // intro / center-point playing → cursor is ignored
     ready: false,
-    paused: false,
     desktop: false,
     reducedMotion: false,
     pointerX: 0,
@@ -53,6 +54,8 @@ function createHeroController({ heroRef, videoRef, glowRef }) {
     glowTarget: GLOW_TARGETS.focus,
     glowFrame: 0,
     glowLast: 0,
+    sound: 'pending', // 'on' | 'pending' | 'off' — reported by HeroVideo
+    soundListeners: new Set(),
   }
 
   const setData = (key, value) => {
@@ -102,7 +105,7 @@ function createHeroController({ heroRef, videoRef, glowRef }) {
 
   /* ---------- 30s center-point countdown (pausable) ---------- */
 
-  const canCount = () => !s.paused && s.gates.visible && s.gates.inView
+  const canCount = () => s.gates.visible && s.gates.inView
 
   function pauseTimer() {
     const t = s.timer
@@ -162,12 +165,12 @@ function createHeroController({ heroRef, videoRef, glowRef }) {
   // Timer fired: point now if she is at rest, otherwise as soon as she gets there.
   function requestPoint() {
     s.pointDue = true
-    if (!s.locked && !s.paused && s.clip === CLIPS.WORKING) playPoint()
+    if (!s.locked && s.clip === CLIPS.WORKING) playPoint()
   }
 
   function rest({ followCursor = false } = {}) {
-    if (s.pointDue && !s.paused) return playPoint()
-    const side = followCursor && s.desktop && !s.paused ? SIDE_CLIP_FOR_ZONE[s.zone] : null
+    if (s.pointDue) return playPoint()
+    const side = followCursor && s.desktop ? SIDE_CLIP_FOR_ZONE[s.zone] : null
     if (side) {
       go(side)
       setGlow(s.zone)
@@ -178,7 +181,7 @@ function createHeroController({ heroRef, videoRef, glowRef }) {
   }
 
   function applyZone(zone) {
-    if (s.locked || !s.ready || s.paused) return
+    if (s.locked || !s.ready) return
     const side = SIDE_CLIP_FOR_ZONE[zone]
     if (side) {
       if (s.clip !== side) go(side)
@@ -219,7 +222,7 @@ function createHeroController({ heroRef, videoRef, glowRef }) {
 
   // Tap (touch) / keyboard button: replay the intro, only from rest.
   function greet() {
-    if (!s.ready || s.locked || s.paused || s.clip !== CLIPS.WORKING) return
+    if (!s.ready || s.locked || s.clip !== CLIPS.WORKING) return
     lock()
     go(INTRO_SEQUENCE[0])
   }
@@ -228,17 +231,26 @@ function createHeroController({ heroRef, videoRef, glowRef }) {
     if (!s.desktop) greet() // desktop uses hover zones
   }
 
-  function setPaused(paused) {
-    s.paused = paused
-    if (paused) {
-      videoRef.current?.pause()
-      pauseTimer()
-      return
-    }
-    videoRef.current?.resume()
-    runTimer()
-    if (s.pointDue && !s.locked && s.clip === CLIPS.WORKING) playPoint()
+  /* ---------- sound (a tiny store for the sound button) ---------- */
+
+  function onSoundState(state) {
+    if (state === s.sound) return
+    s.sound = state
+    s.soundListeners.forEach((listener) => listener())
   }
+
+  const sound = Object.freeze({
+    subscribe(listener) {
+      s.soundListeners.add(listener)
+      return () => s.soundListeners.delete(listener)
+    },
+    get: () => s.sound,
+    // Called from the button's click — the user gesture browsers require for audio.
+    // 'pending' or 'off' → sound on; 'on' → mute.
+    toggle() {
+      videoRef.current?.setSound(s.sound !== 'on')
+    },
+  })
 
   function onReady() {
     s.ready = true
@@ -322,10 +334,10 @@ function createHeroController({ heroRef, videoRef, glowRef }) {
     mount,
     api: Object.freeze({
       pointerHandlers: { onPointerMove, onPointerLeave },
-      videoHandlers: { onReady, onClipStart, onClipEnd },
+      videoHandlers: { onReady, onClipStart, onClipEnd, onSoundState },
       onTap,
       greet,
-      setPaused,
+      sound,
     }),
   }
 }

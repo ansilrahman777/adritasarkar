@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { ArrowDown, MousePointer2 } from 'lucide-react'
+import { ArrowDown } from 'lucide-react'
 
 const EASE = [0.22, 1, 0.36, 1]
 
@@ -13,27 +13,10 @@ const reveal = (delay) => ({
   transition: { duration: 0.8, ease: EASE, delay },
 })
 
-/*
- * Desktop: a three-segment track with a pointer. Idle, it demonstrates the zones;
- * while the cursor is over the hero it mirrors the live zone (data-zone on the hero).
- */
-function ZoneIndicator() {
-  return (
-    <span aria-hidden="true" className="zone-hint hidden hover-desktop:inline-flex">
-      <span className="zone-track">
-        <span className="zone-seg" data-seg="left" />
-        <span className="zone-seg" data-seg="center" />
-        <span className="zone-seg" data-seg="right" />
-      </span>
-      <MousePointer2 className="zone-pointer" strokeWidth={2.25} />
-    </span>
-  )
-}
-
-// Touch: a soft tap ripple.
+// Touch: a soft tap ripple. Desktop needs no hint — the custom cursor shows the interaction.
 function TapIndicator() {
   return (
-    <span aria-hidden="true" className="tap-hint hover-desktop:hidden">
+    <span aria-hidden="true" className="tap-hint">
       <span className="tap-ring" />
       <span className="tap-dot" />
     </span>
@@ -71,12 +54,10 @@ export default function HeroContent() {
 
           <motion.p
             {...reveal(0.6)}
-            className="mt-5 inline-flex items-center gap-3 text-sm text-blush-100/70 split:mt-12 short:mt-5"
+            className="mt-5 inline-flex items-center gap-3 text-sm text-blush-100/70 hover-desktop:hidden split:mt-12 short:mt-5"
           >
-            <ZoneIndicator />
             <TapIndicator />
-            <span className="hidden hover-desktop:inline">Move your cursor to interact</span>
-            <span className="hover-desktop:hidden">Tap Adrita to say hi</span>
+            <span>Tap Adrita to say hi</span>
           </motion.p>
         </div>
       </div>

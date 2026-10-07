@@ -49,6 +49,21 @@ Everything respects `prefers-reduced-motion`.
 | Cursor center | `working` (immediately) |
 | 30 s after the intro | `center-point`, played to the end (cursor ignored) → `working` |
 | Tap (touch) / keyboard | replays `center-look` |
+| **Mute / Sound on** button | sound is on by default; the button mutes or unmutes |
+
+**Sound (on by default).** The hero always tries to play with sound. Browsers only allow
+that once the visitor has interacted with the site, so on most first visits the video plays
+silently, the button pulses **Sound on**, and the visitor's first click, tap or key press
+anywhere turns sound on (moving the mouse or scrolling doesn't count — browser rule). The
+**Mute** button is always there. Only the clip on screen is audible, its audio crossfades
+with each switch, and it stops whenever the hero is scrolled away or the tab is hidden.
+
+**Cursor.** On mouse/trackpad devices the whole site uses a custom cursor
+(`components/site/SiteCursor.jsx`, styles under "Custom cursor" in `globals.css`): a dot
+plus an easing ring that turns white on dark sections and ink/crimson on light ones, grows
+over links and buttons, and steps aside for the system I-beam in text fields. In the hero
+it also shows which way Adrita will look (left/right arrows) and turns dashed while the
+intro or point-down plays. Touch devices keep their normal behaviour.
 
 Hero settings — `components/hero/constants.js`:
 

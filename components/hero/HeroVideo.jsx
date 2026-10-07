@@ -25,12 +25,31 @@ import {
  * so the background never flashes through. Any switch can interrupt another; stale
  * async work is discarded via a token. Only one element plays at a time.
  *
+ * Sound (on by default)
+ * ---------------------
+ * The hero always tries to play with sound. Browsers only allow that after the visitor
+ * has interacted with the site, so on most first visits play() is refused: the clip
+ * then plays muted, the sound state becomes 'pending', and the visitor's first click,
+ * tap or key press anywhere turns sound on. Mute (setSound(false)) is always available.
+ * Only the clip on screen is ever audible, and on a switch its audio crossfades with
+ * the picture. iOS ignores `volume`, so there the old clip's audio is cut instead.
+ *
+ * Sound states reported through onSoundState: 'on' | 'pending' | 'off'.
+ *
  * Clip length is never assumed: a clip "finishes" on its real `ended` event.
  * All playback state lives in refs → no React re-renders during interaction.
  */
 
 const HAVE_CURRENT_DATA = 2
 const HIDDEN_STYLE = { opacity: 0 }
+
+const clamp01 = (value) => Math.min(1, Math.max(0, value))
+// `volume` throws outside [0, 1]; float maths can land a hair outside it.
+function setVolume(video, value) {
+  video.volume = clamp01(value)
+}
+// Events that count as a user gesture for media (mouse, touch, keyboard).
+const GESTURE_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']
 
 function waitForEvent(target, types, timeoutMs) {
   return new Promise((resolve) => {
@@ -78,11 +97,13 @@ async function safePlay(video) {
     await video.play()
     return 'playing'
   } catch (error) {
-    // NotAllowedError = autoplay policy (e.g. iOS Low Power Mode). AbortError = superseded.
+    // NotAllowedError = autoplay policy (e.g. sound without a gesture, iOS Low Power
+    // Mode). AbortError = superseded by another call.
     return error?.name === 'NotAllowedError' ? 'blocked' : 'failed'
   }
 }
 
+// Starts muted (required for autoplay); sound is enabled later from a user gesture.
 function hardenVideo(video) {
   video.muted = true
   video.defaultMuted = true
@@ -98,7 +119,7 @@ function hardenVideo(video) {
 }
 
 const HeroVideo = forwardRef(function HeroVideo(
-  { initialClip = INITIAL_CLIP, onReady, onClipStart, onClipEnd },
+  { initialClip = INITIAL_CLIP, onReady, onClipStart, onClipEnd, onSoundState },
   ref
 ) {
   const containerRef = useRef(null)
@@ -118,24 +139,27 @@ const HeroVideo = forwardRef(function HeroVideo(
   const preloadControllerRef = useRef(null)
   const preloadedRef = useRef(false)
   const readyRef = useRef(false)
-  const blockedRef = useRef(false)
-  const gateRef = useRef({ page: true, inView: true, user: true })
-  const callbacksRef = useRef({ onReady, onClipStart, onClipEnd })
+  const blockedRef = useRef(false) // autoplay refused entirely → retry on next gesture
+  const gateRef = useRef({ page: true, inView: true })
+  const callbacksRef = useRef({ onReady, onClipStart, onClipEnd, onSoundState })
+
+  const soundRef = useRef(true) // sound wanted (default); false once the visitor mutes
+  const soundBlockedRef = useRef(false) // browser refused sound → muted until a gesture
+  const volumeControlRef = useRef(true) // false on iOS, where `volume` is read-only
+  const audioFrameRef = useRef(0)
 
   useEffect(() => {
-    callbacksRef.current = { onReady, onClipStart, onClipEnd }
+    callbacksRef.current = { onReady, onClipStart, onClipEnd, onSoundState }
   })
 
   // All helpers below read refs only, so their closures never go stale.
   const buffers = () => [bufferARef.current, bufferBRef.current].filter(Boolean)
   const allVideos = () => [workingRef.current, ...buffers()].filter(Boolean)
-  const canPlay = () => {
-    const gate = gateRef.current
-    return gate.page && gate.inView && gate.user
-  }
+  const canPlay = () => gateRef.current.page && gateRef.current.inView
   const mode = () => (window.matchMedia(DESKTOP_QUERY).matches ? 'desktop' : 'touch')
   const fadeFor = (clip) =>
     reducedMotionRef.current ? 0 : clip === CLIPS.WORKING ? RETURN_FADE_MS : CROSSFADE_MS
+  const audible = () => soundRef.current && !soundBlockedRef.current
 
   function load(video, clip) {
     if (video.dataset.clip === clip) return
@@ -149,8 +173,107 @@ const HeroVideo = forwardRef(function HeroVideo(
     video.style.transitionDuration = '0ms'
     video.style.opacity = '0'
     video.style.zIndex = '0'
+    video.muted = true
     if (!video.paused) video.pause()
   }
+
+  /* ---------- sound ---------- */
+
+  function reportSound() {
+    const state = !soundRef.current ? 'off' : soundBlockedRef.current ? 'pending' : 'on'
+    callbacksRef.current.onSoundState?.(state)
+  }
+
+  // Plays with sound when allowed; otherwise silently, flagged so the next gesture
+  // restores it ('pending').
+  async function playAudible(video) {
+    let result = await safePlay(video)
+    if (result === 'blocked' && !video.muted) {
+      video.muted = true
+      soundBlockedRef.current = true
+      result = await safePlay(video)
+    }
+    if (result === 'playing') reportSound()
+    return result
+  }
+
+  // The incoming clip's audio fades up while the outgoing clip's fades out.
+  function crossfadeAudio(next, prev, duration) {
+    cancelAnimationFrame(audioFrameRef.current)
+    audioFrameRef.current = 0
+    const outgoing = prev && prev !== next ? prev : null
+
+    if (!audible()) {
+      next.muted = true
+      if (outgoing) outgoing.muted = true
+      return
+    }
+
+    next.muted = false
+    if (!duration || !volumeControlRef.current) {
+      next.volume = 1
+      if (outgoing) outgoing.muted = true
+      return
+    }
+
+    const fromIn = next.volume // 0 when it started silently, see play()
+    const fromOut = outgoing && !outgoing.muted ? outgoing.volume : 0
+    let start = 0
+    const step = (now) => {
+      // Timed from the first frame: rAF timestamps can precede performance.now().
+      if (!start) start = now
+      const t = clamp01((now - start) / duration)
+      setVolume(next, fromIn + (1 - fromIn) * t)
+      if (outgoing) setVolume(outgoing, fromOut * (1 - t))
+      if (t < 1) {
+        audioFrameRef.current = requestAnimationFrame(step)
+        return
+      }
+      audioFrameRef.current = 0
+      if (outgoing) {
+        outgoing.muted = true
+        setVolume(outgoing, 1)
+      }
+    }
+    audioFrameRef.current = requestAnimationFrame(step)
+  }
+
+  // iOS Safari only lets an element play with sound once a gesture has started it,
+  // so hidden buffers are primed during the click that turns sound on.
+  function primeForSound(video) {
+    if (!video.getAttribute('src') || !video.paused) return
+    video.muted = false
+    video.play()?.catch(() => {})
+    video.pause()
+    video.muted = true
+  }
+
+  // Must be called from a user gesture (the sound button, or any tap while 'pending').
+  function applySound(on) {
+    soundRef.current = on
+    soundBlockedRef.current = false
+    cancelAnimationFrame(audioFrameRef.current)
+    audioFrameRef.current = 0
+    const active = activeRef.current
+
+    allVideos().forEach((video) => {
+      if (video === active) return
+      if (video === pendingRef.current) {
+        video.muted = !on // still hidden; its volume comes up when revealed
+        return
+      }
+      video.muted = true
+      if (on) primeForSound(video)
+    })
+
+    reportSound()
+    if (!active) return
+    active.volume = 1
+    active.muted = !on
+    if (on && canPlay() && active.paused && !active.ended) playAudible(active)
+  }
+
+  /* ---------- presentation ---------- */
 
   function present(next, fade) {
     const prev = activeRef.current
@@ -160,6 +283,7 @@ const HeroVideo = forwardRef(function HeroVideo(
     next.style.transitionDuration = `${duration}ms`
     next.style.zIndex = '2'
     next.style.opacity = '1'
+    crossfadeAudio(next, prev, duration)
 
     allVideos().forEach((video) => {
       if (video !== next && video !== prev) hide(video)
@@ -220,7 +344,10 @@ const HeroVideo = forwardRef(function HeroVideo(
   function abandon(video, token) {
     if (video.dataset.owner !== String(token)) return
     if (pendingRef.current === video) pendingRef.current = null
-    if (video !== activeRef.current && !video.paused) video.pause()
+    if (video !== activeRef.current) {
+      video.muted = true
+      if (!video.paused) video.pause()
+    }
   }
 
   async function play(clip) {
@@ -234,7 +361,7 @@ const HeroVideo = forwardRef(function HeroVideo(
     if (video === activeRef.current) {
       // Requested clip is already on screen (only possible for working).
       pendingRef.current = null
-      if (canPlay() && video.paused && !video.ended) safePlay(video)
+      if (canPlay() && video.paused && !video.ended) playAudible(video)
       return
     }
 
@@ -243,6 +370,9 @@ const HeroVideo = forwardRef(function HeroVideo(
     load(video, clip)
     video.loop = clip === CLIPS.WORKING
     if (video.currentTime > 0) video.currentTime = 0
+    // Silent until revealed; crossfadeAudio brings the volume up with the picture.
+    video.muted = !audible()
+    video.volume = !video.muted && volumeControlRef.current && activeRef.current ? 0 : 1
 
     const timeout = clip === CLIPS.WORKING ? Infinity : CLIP_LOAD_TIMEOUT_MS
     let ok = await waitUntilDecodable(video, timeout)
@@ -259,7 +389,7 @@ const HeroVideo = forwardRef(function HeroVideo(
       return skip(clip)
     }
 
-    const result = canPlay() ? await safePlay(video) : 'deferred'
+    const result = canPlay() ? await playAudible(video) : 'deferred'
     if (isStale()) return abandon(video, token)
     if (result === 'failed') {
       pendingRef.current = null
@@ -293,7 +423,7 @@ const HeroVideo = forwardRef(function HeroVideo(
     if (!video || !readyRef.current) return
     if (canPlay()) {
       if (video.paused && !video.ended) {
-        safePlay(video).then((result) => {
+        playAudible(video).then((result) => {
           blockedRef.current = result === 'blocked'
         })
       }
@@ -334,7 +464,7 @@ const HeroVideo = forwardRef(function HeroVideo(
     if (clip === CLIPS.WORKING) {
       // Safety net — `loop` normally prevents this.
       video.currentTime = 0
-      if (canPlay()) safePlay(video)
+      if (canPlay()) playAudible(video)
       return
     }
     callbacksRef.current.onClipEnd?.(clip)
@@ -353,6 +483,11 @@ const HeroVideo = forwardRef(function HeroVideo(
     const reactionBuffers = [bufferARef.current, bufferBRef.current]
     ;[working, ...reactionBuffers].forEach(hardenVideo)
 
+    // iOS keeps `volume` fixed at 1, so audio crossfades fall back to a cut there.
+    const probe = document.createElement('video')
+    probe.volume = 0.5
+    volumeControlRef.current = probe.volume === 0.5
+
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
     const updateMotion = () => {
       reducedMotionRef.current = motionQuery.matches
@@ -367,7 +502,11 @@ const HeroVideo = forwardRef(function HeroVideo(
       preloadControllerRef.current?.abort()
       clearTimeout(hideTimerRef.current)
       clearTimeout(warmTimerRef.current)
+      cancelAnimationFrame(audioFrameRef.current)
       motionQuery.removeEventListener('change', updateMotion)
+      ;[working, ...reactionBuffers].forEach((video) => {
+        if (video) video.muted = true
+      })
       reactionBuffers.forEach((video) => {
         if (!video) return
         video.pause()
@@ -387,7 +526,8 @@ const HeroVideo = forwardRef(function HeroVideo(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Pause when the tab is hidden or the hero is scrolled away; resume the same clip after.
+  // Pause when the tab is hidden or the hero is scrolled away (so audio never plays
+  // over the rest of the page); resume the same clip after.
   useEffect(() => {
     const container = containerRef.current
 
@@ -407,20 +547,21 @@ const HeroVideo = forwardRef(function HeroVideo(
       observer.observe(container)
     }
 
-    // If autoplay was refused, the first user gesture unlocks playback.
-    const unlock = () => {
+    // The first tap/click/key anywhere restores whatever the browser refused without a
+    // gesture — including the default sound. The sound button handles its own clicks.
+    const onGesture = (event) => {
+      const onToggle = event.target instanceof Element && event.target.closest('[data-sound-toggle]')
+      if (!onToggle && soundRef.current && soundBlockedRef.current) applySound(true)
       if (!blockedRef.current) return
       blockedRef.current = false
       syncPlayback()
     }
-    window.addEventListener('pointerdown', unlock, { passive: true })
-    window.addEventListener('keydown', unlock)
+    GESTURE_EVENTS.forEach((type) => window.addEventListener(type, onGesture, { passive: true }))
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility)
       observer?.disconnect()
-      window.removeEventListener('pointerdown', unlock)
-      window.removeEventListener('keydown', unlock)
+      GESTURE_EVENTS.forEach((type) => window.removeEventListener(type, onGesture))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -431,13 +572,9 @@ const HeroVideo = forwardRef(function HeroVideo(
       play(clip) {
         play(clip).catch(() => skip(clip))
       },
-      pause() {
-        gateRef.current.user = false
-        syncPlayback()
-      },
-      resume() {
-        gateRef.current.user = true
-        syncPlayback()
+      // Call from a click/tap handler: browsers only allow sound after a user gesture.
+      setSound(on) {
+        applySound(on)
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
